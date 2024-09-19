@@ -1,0 +1,117 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define FIFO1 "fifo1"
+#define FIFO2 "fifo2"
+
+int main() {
+    char p[100], c[5000], ch;
+    int num, fd, fd2, f1;
+
+    // Create FIFOs
+    mkfifo(FIFO1, 0666);
+    mkfifo(FIFO2, 0666);
+
+    printf("\nServer online...\n");
+
+    // Open FIFOs
+    fd = open(FIFO1, O_RDONLY);
+    fd2 = open(FIFO2, O_WRONLY);
+
+    printf("Server online\nWaiting for client\n\n");
+
+    if ((num = read(fd, p, 100)) == -1) {
+        perror("\nRead Error");
+    } else {
+        p[num] = '\0';  // Null-terminate the filename
+        printf("\nFile requested: %s\n", p);
+
+        // Open the requested file
+        if ((f1 = open(p, O_RDONLY)) < 0) {
+            write(fd2, "File not found", 15);
+            return 1;
+        } else {
+            // Read the file content
+            num = 0;
+            while ((ch = read(f1, &c[num], 1)) > 0) {
+                num++;
+            }
+            c[num] = '\0';
+
+            printf("Server: Transferring the contents of: %s\n", p);
+
+            // Write to FIFO
+            if ((num = write(fd2, c, strlen(c))) == -1) {
+                printf("\nError in writing to FIFO\n");
+            } else {
+                printf("\nFile transfer completed\n");
+            }
+        }
+    }
+
+    // Close file descriptors
+    close(fd);
+    close(fd2);
+    close(f1);
+
+    return 0;
+}
+
+
+//client side
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define FIFO1 "fifo1"
+#define FIFO2 "fifo2"
+
+int main() {
+    char p[100], c[5000];
+    int num, fd, fd2;
+
+    // Create FIFOs
+    mkfifo(FIFO1, 0666);
+    mkfifo(FIFO2, 0666);
+
+    printf("\nClient online...\n");
+
+    // Open FIFOs
+    fd = open(FIFO1, O_WRONLY);
+    fd2 = open(FIFO2, O_RDONLY);
+
+    printf("Client: Enter the filename: \n");
+    scanf("%s", p);
+
+    // Write filename to FIFO
+    num = write(fd, p, strlen(p));
+    if (num == -1) {
+        perror("\nWrite Error.\n");
+        return 1;
+    } else {
+        printf("\nWaiting for reply...\n");
+
+        // Read the file content from FIFO
+        if ((num = read(fd2, c, 5000)) == -1) {
+            perror("\nError while reading from FIFO\n");
+        } else {
+            c[num] = '\0';  // Null-terminate the received data
+            printf("%s", c);
+        }
+    }
+
+    // Close file descriptors
+    close(fd);
+    close(fd2);
+
+    return 0;
+}
