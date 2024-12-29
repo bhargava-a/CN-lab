@@ -1,0 +1,129 @@
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {
+    int fd, sockfd, newsockfd, clilen, portno, n;
+    struct sockaddr_in seradd, cliadd;
+    char buffer[4096];
+
+    if (argc < 2) {
+        fprintf(stderr, "\nNo port provided.\n");
+        exit(1);
+    }
+
+    portno = atoi(argv[1]);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("\nError opening socket.\n");
+        exit(1);
+    }
+
+    bzero((char *)&seradd, sizeof(seradd));
+    seradd.sin_family = AF_INET;
+    seradd.sin_addr.s_addr = htonl(INADDR_ANY);
+    seradd.sin_port = htons(portno);
+
+    if (bind(sockfd, (struct sockaddr *)&seradd, sizeof(seradd)) < 0) {
+        perror("\nIP address cannot bind.\n");
+        exit(1);
+    }
+
+    listen(sockfd, 5);
+    clilen = sizeof(cliadd);
+    printf("\nServer waiting for client request\n");
+
+    while (1) {
+        newsockfd = accept(sockfd, (struct sockaddr *)&cliadd, (socklen_t *)&clilen);
+        if (newsockfd < 0) {
+            perror("\nServer cannot accept connection request.\n");
+            continue;
+        }
+
+        bzero(buffer, 4096);
+        if (read(newsockfd, buffer, 4096) <= 0) {
+            perror("\nError reading from socket.\n");
+            close(newsockfd);
+            continue;
+        }
+
+        fd = open(buffer, O_RDONLY);
+        if (fd < 0) {
+            perror("\nFile does not exist.\n");
+            close(newsockfd);
+            continue;
+        }
+
+        while (1) {
+            n = read(fd, buffer, 4096);
+            if (n <= 0) break;
+            write(newsockfd, buffer, n);
+        }
+
+        printf("\nFile transfer complete.\n");
+        close(fd);
+        close(newsockfd);
+    }
+
+    return 0;
+}
+
+
+//Client side
+
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {
+    int sockfd, portno, n;
+    struct sockaddr_in seradd;
+    char buffer[4096], *serip;
+
+    if (argc < 4) {
+        fprintf(stderr, "Usage: %s serverip filename port\n", argv[0]);
+        exit(1);
+    }
+
+    serip = argv[1];
+    portno = atoi(argv[3]);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("\nError in creating socket.\n");
+        exit(1);
+    }
+
+    bzero((char *)&seradd, sizeof(seradd));
+    seradd.sin_family = AF_INET;
+    seradd.sin_addr.s_addr = inet_addr(serip);
+    seradd.sin_port = htons(portno);
+
+    if (connect(sockfd, (struct sockaddr *)&seradd, sizeof(seradd)) < 0) {
+        perror("\nError in connection setup.\n");
+        exit(1);
+    }
+
+    write(sockfd, argv[2], strlen(argv[2]) + 1);
+    bzero(buffer, 4096);
+
+    while ((n = read(sockfd, buffer, 4096)) > 0) {
+        write(1, buffer, n);
+    }
+
+    if (n < 0) {
+        perror("\nError reading from socket.\n");
+    }
+
+    close(sockfd);
+    return 0;
+}
